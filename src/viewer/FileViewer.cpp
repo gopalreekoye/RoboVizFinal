@@ -29,9 +29,13 @@
  */
 #include <cstdlib>
 #include <fstream>
+#include <sstream>
 #include <iostream>
 #include <boost/filesystem.hpp>
 #include <boost/algorithm/string/predicate.hpp>
+#include <boost/regex.hpp>
+#include <boost/algorithm/string.hpp>
+
 
 #include "config/ConfigurationReader.h"
 #include "config/RobogenConfig.h"
@@ -267,7 +271,7 @@ int main(int argc, char *argv[]) {
 
 	// Decode configuration file
 	boost::shared_ptr<RobogenConfig> configuration =
-			ConfigurationReader::parseConfigurationFile(std::string(argv[3]));
+			ConfigurationReader::parseConfigurationFile(std::string(argv[2]));
 	if (configuration == NULL) {
 		std::cerr << "Problems parsing the configuration file. Quit."
 				<< std::endl;
@@ -286,9 +290,9 @@ int main(int argc, char *argv[]) {
 	bool writeWebGL = false;
 	bool overwrite = false;
 
-	int currentArg = 4;
-	if (argc >= 5 && !boost::starts_with(argv[4], "--")) {
-		std::stringstream ss(argv[4]);
+	int currentArg = 3;
+	if (argc >= 4 && !boost::starts_with(argv[3], "--")) {
+		std::stringstream ss(argv[3]);
 		currentArg++;
 		ss >> desiredStart;
 		--desiredStart; // -- accounts for parameter being 1..n
@@ -425,18 +429,53 @@ int main(int argc, char *argv[]) {
 	if (seed != -1)
 		rng.seed(seed);
 
+		//read multiple robot file
+		//and write to individual files
+	unsigned int swarmSize = configuration->getSwarmSize();
+	
+
 	// ---------------------------------------
 	// Robot decoding
 	// ---------------------------------------
-	unsigned int swarmSize = configuration->getSwarmSize();
+
+	std::string robotFileString(argv[1]);
+	std::cout<<"Robot file provided: "<<robotFileString<<std::endl;
 	std::vector<robogenMessage::Robot> robotMessage(swarmSize);
-	for(int i=1;i<=swarmSize;i++){
-		std::string robotFileString(argv[i]);
-		
-		if(!RobotRepresentation::createRobotMessageFromFile(robotMessage[i-1],
-		robotFileString)) {
-		exitRobogen(EXIT_FAILURE);
+	//homogenous robot swarm reading
+	if (boost::filesystem::path(robotFileString).extension().string().compare(".json") == 0) {
+		std::cout<<"Homogeneous robot swarm initialisation."<<std::endl;
+		for(int i=0;i<swarmSize;i++){
+			if(!RobotRepresentation::createRobotMessageFromFile(robotMessage[i],
+			robotFileString)) {
+				exitRobogen(EXIT_FAILURE);
+			}
 		}
+
+	} //heterogeneous robot swarm reading
+	else if(boost::filesystem::path(robotFileString).extension().string().compare(".txt") == 0) {
+		std::cout<<"Heterogenous robot swarm initialisation."<<std::endl;
+		std::vector<std::string> listFile;
+		std::ifstream file(robotFileString);
+		std::string str; 
+		
+		while (std::getline(file, str)) {
+			listFile.push_back(str);
+			
+			
+		}
+
+		for(int i=0;i<swarmSize;i++){
+			std::cout<<"robot file: "<<listFile[i]<<std::endl;
+			if(!RobotRepresentation::createRobotMessageFromFile(robotMessage[i],
+			listFile[i])) {
+			exitRobogen(EXIT_FAILURE);
+			}
+		}
+	}else {
+		std::cerr << "File extension of provided robot file could not be "
+				"resolved. Use .dat or .json for robot messages and .txt for "
+				"robot text files" << std::endl;
+		exitRobogen(EXIT_FAILURE);
 	}
 	
 	
